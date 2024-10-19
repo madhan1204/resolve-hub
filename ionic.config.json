@@ -1,0 +1,7 @@
+{
+  "name": "ResolveHub",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "vue-vite"
+}
