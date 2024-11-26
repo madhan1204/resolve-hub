@@ -3,6 +3,12 @@
     <ion-header>
       <ion-toolbar>
         <ion-title>User Profile</ion-title>
+        <ion-buttons slot="end">
+          <!-- Logout Button -->
+          <ion-button @click="logout" color="danger">
+            Logout
+          </ion-button>
+        </ion-buttons>
       </ion-toolbar>
     </ion-header>
     <ion-content>
@@ -27,16 +33,31 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
+import { useRouter } from 'vue-router';
 import ProfileCard from '../components/ProfileCard.vue';
 
 const email = ref('');
 const userId = ref('');
 const isEditing = ref(false);
+const router = useRouter(); // Router instance for navigation
 
 // Toggle edit mode
 const toggleEdit = () => {
   isEditing.value = !isEditing.value; // Toggle the editing state
+};
+
+// Logout functionality
+const logout = async () => {
+  const auth = getAuth();
+  try {
+    await signOut(auth);
+    alert('Logged out successfully!');
+    router.push('/'); // Redirect to login or home page
+  } catch (error) {
+    console.error('Error logging out:', error);
+    alert('Failed to log out. Please try again.');
+  }
 };
 
 // Fetch user data on component mount

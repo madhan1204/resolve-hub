@@ -87,7 +87,9 @@
       // Emit event to change editing state in the parent component
       emit('update:isEditing', false);
     } catch (error) {
+      if(error instanceof Error){
       alert(`Error updating profile: ${error.message}`);
+      }
     }
   };
   

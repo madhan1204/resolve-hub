@@ -63,6 +63,7 @@ const registerUser = async () => {
     await alert.onDidDismiss();
     router.push('/');
   } catch (error) {
+    if(error instanceof Error){
     // Display error message if registration fails
     const alert = await alertController.create({
       header: 'Registration Failed',
@@ -71,6 +72,7 @@ const registerUser = async () => {
     });
     await alert.present();
   }
+}
 };
 </script>
 

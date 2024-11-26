@@ -8,7 +8,7 @@ import {
   IonCardSubtitle, IonCardContent, IonTabBar, IonTabButton, IonTabs, IonLabel, 
   IonTitle, IonToolbar, IonFab, IonHeader, IonFabButton, IonItem, IonInput, IonSelect, IonSelectOption,
   IonSearchbar, IonInfiniteScrollContent, IonInfiniteScroll, IonModal,
-  IonRouterOutlet, alertController 
+  IonRouterOutlet, alertController ,IonSpinner, IonImg ,IonButtons
 } from '@ionic/vue';
 
 /* Core CSS required for Ionic components to work properly */
@@ -65,6 +65,9 @@ const app = createApp(App)
   .use(router);
 
 // Globally register components
+app.component('IonButtons', IonButtons);
+app.component('IonImg', IonImg);
+app.component('IonSpinner', IonSpinner);
 app.component('IonModal', IonModal);
 app.component('IonSearchbar', IonSearchbar);
 app.component('IonInfiniteScrollContent', IonInfiniteScrollContent);

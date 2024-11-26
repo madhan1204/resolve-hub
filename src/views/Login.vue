@@ -30,41 +30,70 @@
   </template>
   
   <script setup lang="ts">
-  import { ref } from 'vue';
-  import { useRouter } from 'vue-router';
-  import { alertController, IonPage, IonContent, IonCard, IonCardHeader, IonCardTitle, IonCardContent, IonItem, IonLabel, IonInput, IonButton, IonIcon } from '@ionic/vue';
-  // import { logInOutline } from 'ionicons/icons';
-  import { signInWithEmailAndPassword } from 'firebase/auth';
-  import { auth } from '../firebase';
-  
-  const email = ref('');
-  const password = ref('');
-  const router = useRouter();
-  
-  const loginUser = async () => {
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, email.value, password.value);
-      await alertController.create({
-        header: 'Success',
-        message: `Welcome back, ${userCredential.user.email}!`,
-        buttons: [
-          {
-            text: 'OK',
-            handler: () => {
-              router.push('/tabs/home'); // Redirect to HomePage.vue
-            }
-          }
-        ]
-      }).then(alert => alert.present());
-    } catch (error) {
-      await alertController.create({
-        header: 'Login Failed',
-        message: `Error logging in: ${error.message}`,
-        buttons: ['OK']
-      }).then(alert => alert.present());
+import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { alertController } from '@ionic/vue';
+import { signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../firebase'; // Ensure db is imported
+
+const email = ref('');
+const password = ref('');
+const router = useRouter();
+
+// Check auth state on mount
+onMounted(() => {
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      // Fetch user data and redirect based on role
+      const userDoc = doc(db, 'users', user.uid);
+      getDoc(userDoc).then((snapshot) => {
+        const userData = snapshot.data();
+        const isAdmin = userData?.isAdmin || false;
+        router.push(isAdmin ? '/tabs/adminhome' : '/tabs/home');
+      });
     }
-  };
+  });
+});
+
+// Login function
+const loginUser = async () => {
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email.value, password.value);
+
+    const userDoc = doc(db, 'users', userCredential.user.uid);
+    const userSnapshot = await getDoc(userDoc);
+    const userData = userSnapshot.data();
+    const isAdmin = userData?.isAdmin || false;
+
+    const alert = await alertController.create({
+      header: 'Success',
+      message: `Welcome back, ${userCredential.user.email}!`,
+      buttons: [
+        {
+          text: 'OK',
+          handler: () => {
+            // Redirect based on role
+            router.push(isAdmin ? '/tab/adminhome' : '/tabs/home');
+          },
+        },
+      ],
+    });
+    await alert.present();
+  } catch (error) {
+    if(error instanceof Error){
+    const alert = await alertController.create({
+      header: 'Login Failed',
+      message: `Error logging in: ${error.message}`,
+      buttons: ['OK'],
+    });
+    await alert.present();
+  }
+  }
+};
+
   </script>
+  
   
   <style scoped>
   .header-image {

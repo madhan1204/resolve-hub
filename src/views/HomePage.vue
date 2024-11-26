@@ -28,42 +28,85 @@
           </ion-item>
 
           <ion-item>
+            <ion-label position="stacked">Issue Description</ion-label>
+            <ion-input v-model="issueDescription" placeholder="Enter issue description"></ion-input>
+          </ion-item>
+
+          <ion-item>
             <ion-label position="stacked">Location</ion-label>
-            <ion-input :value="location" readonly placeholder="Fetch location..."></ion-input>
-            <ion-button expand="block" @click="fetchLocation">Get Location</ion-button>
+            <ion-input v-model="location" placeholder="Enter location"></ion-input>
           </ion-item>
 
           <ion-button expand="block" color="primary" @click="postIssue">Post Issue</ion-button>
           <ion-button expand="block" color="light" @click="closeModal">Cancel</ion-button>
         </div>
       </ion-modal>
+
+      <!-- List of Issue Cards -->
+      <div v-if="issues.length === 0" class="no-issues">
+        <p>No issues available. Create one using the button below!</p>
+      </div>
+
+      <div v-else class="issues-list">
+        <CardComponent
+          v-for="issue in issues"
+          :key="issue.id"
+          :issue="issue"
+          :userId="userId"
+        />
+      </div>
     </ion-content>
   </ion-page>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-import { Geolocation } from '@capacitor/geolocation';
-import { db, storage } from '../firebase'; // Update paths as needed
-import { collection, addDoc, limit } from 'firebase/firestore';
-import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
+import { ref, onMounted } from 'vue';
+import CardComponent from '../components/CardComponent.vue';
+import { db, storage } from '../firebase';
+import {
+  collection,
+  query,
+  onSnapshot,
+  addDoc,
+  where,
+  doc,
+  getDoc,
+} from 'firebase/firestore';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import type { User } from 'firebase/auth';
+
+interface Issue {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  username: string;
+  city: string;
+  status: string;
+  proofImages: string[];
+  timestamp: Date;
+  userId: string; // Ensure userId is included in the Issue type
+}
 
 const isModalOpen = ref(false);
 const issueTitle = ref('');
+const issueDescription = ref('');
+const location = ref('');
 const imageFile = ref<File | null>(null);
-const location = ref<string | null>(null);  // Updated location type
+const issues = ref<Issue[]>([]);
+const userId = ref<string>('');
+const userCity = ref('');
+const userName = ref('');
 
 // Open Modal
-const openModal = () => {
-  isModalOpen.value = true;
-};
-
-// Close Modal
+const openModal = () => { isModalOpen.value = true; };
 const closeModal = () => {
   isModalOpen.value = false;
   issueTitle.value = '';
+  issueDescription.value = '';
+  location.value = '';
   imageFile.value = null;
-  location.value = '';  // Reset location
 };
 
 // Handle Image Upload
@@ -74,69 +117,85 @@ const handleImageUpload = (event: Event) => {
   }
 };
 
-// Fetch Address from OpenWeather API
-async function getAddress(lat: number, lon: number): Promise<string | null> {
-  const apiKey = '03e90ca91897b72f1bd77311ea50959b';
-  const limit = 5;  // You can adjust this limit based on the number of results needed
-  const url = `http://api.openweathermap.org/geo/1.0/reverse?lat=${lat}&lon=${lon}&limit=${limit}&appid=${apiKey}`;
-
-  const response = await fetch(url);
-  const data = await response.json();
-
-  if (data && data.length > 0) {
-    return data[0].name || `${data[0].lat}, ${data[0].lon}`;
-  } else {
-    console.error('No address found');
-    return null;
-  }
-}
-
-
-// Fetch Location Coordinates and Address
-const fetchLocation = async () => {
-  try {
-    const position = await Geolocation.getCurrentPosition();
-    console.log(position);
-    const latitude = position.coords.latitude;
-    const longitude = position.coords.longitude;
-    console.log(latitude);
-    console.log(longitude);
-    location.value = await getAddress(latitude, longitude);  // Await address
-  } catch (error) {
-    console.error("Error fetching location:", error);
-    alert("Unable to fetch location");
-  }
-};
-
-// Post Issue to Firebase
+// Post Issue
 const postIssue = async () => {
   if (!issueTitle.value || !imageFile.value) {
-    alert("Please enter a title and upload an image.");
+    alert('Please enter a title and upload an image.');
     return;
   }
 
   try {
-    // Upload image to Firebase Storage
     const imageRef = storageRef(storage, `issue_images/${imageFile.value.name}`);
     const snapshot = await uploadBytes(imageRef, imageFile.value);
     const imageUrl = await getDownloadURL(snapshot.ref);
 
-    // Add issue data to Firestore
-    const issuesCollection = collection(db, 'issues');
-    await addDoc(issuesCollection, {
+    await addDoc(collection(db, 'issues'), {
       title: issueTitle.value,
-      imageUrl: imageUrl,
-      location: location.value,
+      description: issueDescription.value,
+      imageUrl,
+      proofImages: [],
+      status: 'Pending',
+      username: userName.value,
+      userId: userId.value,
+      city: userCity.value,
       timestamp: new Date(),
     });
 
-    alert("Issue posted successfully!");
+    alert('Issue posted successfully!');
     closeModal();
   } catch (error) {
-    console.error("Error posting issue:", error);
-    alert("Failed to post issue. Please try again.");
+    console.error('Error posting issue:', error);
+    alert('Failed to post issue. Please try again.');
   }
 };
+
+// Fetch Issues
+const fetchIssues = async () => {
+  try {
+    const issuesCollection = collection(db, 'issues');
+    const q = query(issuesCollection, where('city', '==', userCity.value));
+    onSnapshot(q, (snapshot) => {
+      issues.value = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          title: data.title || '',
+          description: data.description || '',
+          imageUrl: data.imageUrl || '',
+          username: data.username || 'Anonymous',
+          city: data.city || 'Unknown City',
+          status: data.status || 'Pending',
+          proofImages: data.proofImages || [],
+          timestamp: data.timestamp?.toDate() || new Date(),
+          userId: data.userId || '',
+        };
+      }) as Issue[];
+    });
+  } catch (error) {
+    console.error('Error fetching issues:', error);
+    alert('Failed to fetch issues. Please try again.');
+  }
+};
+
+// On Mounted
+onMounted(() => {
+  const auth = getAuth();
+  onAuthStateChanged(auth, async (user: User | null) => {
+    if (user) {
+      userId.value = user.uid;
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        userName.value = data.name || 'Anonymous';
+        userCity.value = data.city || 'Unknown City';
+      }
+      await fetchIssues();
+    } else {
+      userId.value = '';
+      console.error('User is not authenticated');
+    }
+  });
+});
 </script>
 
 <style scoped>
@@ -147,45 +206,17 @@ const postIssue = async () => {
 ion-fab-button {
   --background: var(--ion-color-primary);
 }
+
+.no-issues {
+  text-align: center;
+  margin-top: 20px;
+  color: gray;
+}
+
+.issues-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 16px;
+}
 </style>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<!-- <template>
-  <ion-page>
-    <ion-header>
-      <ion-toolbar>
-        <ion-title>Home</ion-title>
-      </ion-toolbar>
-    </ion-header>
-    <ion-content :fullscreen="true">
-      <IssueCard 
-        username="John Doe"
-        dateTime="2024-10-28 10:00 AM"
-        issueTitle="Water Leak in Building"
-        issueDescription="There's a persistent water leak that needs urgent fixing."
-        issueImage="path/to/image.jpg"
-        progress="In Progress"
-      />
-    </ion-content>
-  </ion-page>
-</template>
-
-<script setup lang="ts">
-import IssueCard from '../components/IssueCard.vue';
-import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent } from '@ionic/vue';
-</script> -->
